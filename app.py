@@ -1,16 +1,21 @@
 # 1. import Flask
 from flask import Flask, jsonify
+import sqlalchemy
+from sqlalchemy.ext.automap import automap_base
+from sqlalchemy.orm import Session
+from sqlalchemy import create_engine, func, inspect
 
-# 2. Create the superhero dictionary
-justice_league_members = [
-    {"superhero": "Aquaman", "real_name": "Arthur Curry"},
-    {"superhero": "Batman", "real_name": "Bruce Wayne"},
-    {"superhero": "Cyborg", "real_name": "Victor Stone"},
-    {"superhero": "Flash", "real_name": "Barry Allen"},
-    {"superhero": "Green Lantern", "real_name": "Hal Jordan"},
-    {"superhero": "Superman", "real_name": "Clark Kent/Kal-El"},
-    {"superhero": "Wonder Woman", "real_name": "Princess Diana"}
-]
+# 2. Create the date_precipitation dictionary
+
+engine = create_engine("sqlite:///hawaii.sqlite")
+
+Base = automap_base()
+Base.prepare(engine, reflect=True)
+
+Measurement = Base.classes.measurement
+Station = Base.classes.station
+
+session = Session(engine)
 
 # 3. Create an app, being sure to pass __name__
 app = Flask(__name__)
@@ -19,42 +24,46 @@ app = Flask(__name__)
 # Flask Routes
 #################################################
 
-@app.route("/api/v1.0/justice-league")
-def justice_league():
-    """Return the justice league data as json"""
-
-    return jsonify(justice_league_members)
-
-
 @app.route("/")
 def welcome():
     return (
-        f"Welcome to the Justice League API!<br/>"
+        f"Welcome to the Precipitation API!<br/>"
         f"Available Routes:<br/>"
-        f"/api/v1.0/justice-league<br/>"
-        f"/api/v1.0/justice-league/Aquaman<br/>"
-        f"/api/v1.0/justice-league/Batman<br/>"
-        f"/api/v1.0/justice-league/Cyborg<br/>"
-        f"/api/v1.0/justice-league/Flash<br/>"
-        f"/api/v1.0/justice-league/Green%20Lantern<br/>"
-        f"/api/v1.0/justice-league/Superman<br/>"
-        f"/api/v1.0/justice-league/Wonder%20Woman"
+        f"/api/v1.0/precipitation<br/>"
+        f"/api/v1.0/stations<br/>"
+        f"/api/v1.0/tobs<br/>"
     )
 
+@app.route("/api/v1.0/precipitation")
+def precipitation():
+    """Return the precipitation data as json"""
 
-@app.route("/api/v1.0/justice-league/<superhero>")
-def justice_league_character(superhero):
-    """Fetch the Justice League character whose superhero name matches
-       the path variable supplied by the user, or a 404 if not."""
+    return jsonify(session.query(Measurement.date, Measurement.prcp).filter(Measurement.date >= '2016-08-23').order_by(Measurement.date.desc()).all())
 
-    canonicalized = superhero.replace(" ", "").lower()
-    for character in justice_league_members:
-        search_term = character["superhero"].replace(" ", "").lower()
 
-        if search_term == canonicalized:
-            return jsonify(character)
+@app.route("/api/v1.0/stations")
+def station():
+    """Return the station data as json"""
 
-    return jsonify({"error": f"Character with superhero name {superhero} not found."}), 404
+    return jsonify(session.query(Measurement.station).group_by(Measurement.station).all())
+
+@app.route("/api/v1.0/tobs")
+def tobs():
+    """Return the temperature data from most active station as json"""
+
+    return jsonify(session.query(Measurement.date, Measurement.tobs).filter(Measurement.station == 'USC00519281').filter(Measurement.date >= '2016-08-18').order_by(Measurement.date.desc()).all())
+
+@app.route("/api/v1.0/<start>")
+def start(start):
+    """Fetch the minimum temperature, the average temperature, and the max temperature for dates after a given start date."""
+    
+    return jsonify(session.query(func.min(Measurement.tobs), func.avg(Measurement.tobs), func.max(Measurement.tobs)).filter(Measurement.date >= start).all())
+
+@app.route("/api/v1.0/<start>/<end>")
+def start_end(start, end):
+    """Fetch the minimum temperature, the average temperature, and the max temperature for a given start or start-end range."""
+
+    return jsonify(session.query(func.min(Measurement.tobs), func.avg(Measurement.tobs), func.max(Measurement.tobs)).filter(Measurement.date >= start).filter(Measurement.date <= end).all())
 
 
 if __name__ == "__main__":
